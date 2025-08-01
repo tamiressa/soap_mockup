@@ -6,10 +6,15 @@
 
 # Dependências: pysimplesoap, flask, sqlite3
 
+import os
+import base64
+import sqlite3
+import hashlib
+import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from flask import Flask, request, Response
 from pysimplesoap.server import SoapDispatcher
-import base64, sqlite3, hashlib, logging, os
-from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
 
@@ -21,11 +26,16 @@ LOG_FILE = os.getenv("LOG_FILE", "soap_server.log")
 MAX_LOG_SIZE = int(os.getenv("MAX_LOG_SIZE", 1 * 1024 * 1024))  # 1 MB
 BACKUP_COUNT = int(os.getenv("BACKUP_COUNT", 5))
 
+BASE_DIR = Path(__file__).resolve().parent  # pasta do arquivo main.py
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)  # cria a pasta se não existir
+LOG_PATH = LOG_DIR / LOG_FILE
+
 logger = logging.getLogger("soap_mockup_server")
 logger.setLevel(LOG_LEVEL)
 
 file_handler = RotatingFileHandler(
-    LOG_FILE, maxBytes=MAX_LOG_SIZE, backupCount=BACKUP_COUNT, encoding="utf-8"
+    LOG_PATH, maxBytes=MAX_LOG_SIZE, backupCount=BACKUP_COUNT, encoding="utf-8"
 )
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 file_handler.setFormatter(formatter)

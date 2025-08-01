@@ -6,15 +6,16 @@
 
 # Dependências: zeep, requests, lxml
 
+import logging
+import os
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from lxml import etree
 from zeep import Client
 from zeep.transports import Transport
 from zeep.plugins import HistoryPlugin
 from requests import Session
 from requests.auth import HTTPBasicAuth
-from lxml import etree
-import logging
-import os
-from logging.handlers import RotatingFileHandler
 
 # ==========================
 # Configuração de Logging
@@ -24,12 +25,17 @@ LOG_FILE = os.getenv("LOG_FILE", "soap_client.log")
 MAX_LOG_SIZE = int(os.getenv("MAX_LOG_SIZE", 1 * 1024 * 1024))  # 1 MB
 BACKUP_COUNT = int(os.getenv("BACKUP_COUNT", 5))
 
+BASE_DIR = Path(__file__).resolve().parent  # pasta do arquivo main.py
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)  # cria a pasta se não existir
+LOG_PATH = LOG_DIR / LOG_FILE
+
 logger = logging.getLogger("soap_mockup_client")
 logger.setLevel(LOG_LEVEL)
 
 # Handler de arquivo com rotação
 file_handler = RotatingFileHandler(
-    LOG_FILE, maxBytes=MAX_LOG_SIZE, backupCount=BACKUP_COUNT, encoding="utf-8"
+    LOG_PATH, maxBytes=MAX_LOG_SIZE, backupCount=BACKUP_COUNT, encoding="utf-8"
 )
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 file_handler.setFormatter(formatter)
