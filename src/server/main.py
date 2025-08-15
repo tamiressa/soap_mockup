@@ -16,6 +16,11 @@ from pathlib import Path
 from flask import Flask, request, Response
 from pysimplesoap.server import SoapDispatcher
 
+# ===== [ADICIONADO PELA UI] =====
+from flask import render_template_string
+
+# ================================
+
 app = Flask(__name__)
 
 # ==========================
@@ -188,6 +193,183 @@ DISPATCHER.register_function(
     returns={"success": bool},
     args={"pedido_id": int},
 )
+
+
+# ==========================
+# [ADICIONADO PELA UI] Página HTML de testes
+# ==========================
+UI_HTML = r"""<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>PedidoService - SOAP Tester</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --border:#e5e7eb; --muted:#6b7280; }
+    body { font-family: system-ui, Arial, sans-serif; max-width: 1000px; margin: 24px auto; padding: 0 16px; background:#f8fafc; }
+    h1 { margin: 0 0 12px; }
+    a { color:#2563eb; text-decoration:none; }
+    .card { background:white; border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    label { display:block; font-weight:600; margin-top:10px; }
+    input, select { width:100%; padding:10px; border:1px solid #d1d5db; border-radius:10px; margin-top:6px; background:white; }
+    button { margin-top:12px; margin-right:8px; padding:10px 14px; border-radius:10px; border:1px solid #d1d5db; cursor:pointer; background:white; }
+    button:hover { background:#f3f4f6; }
+    pre { background:#0b1021; color:#e5e7eb; padding:12px; border-radius:10px; overflow:auto; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+    .col3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:16px; }
+    @media (max-width:900px){ .row, .col3 { grid-template-columns: 1fr; } }
+    small { color:var(--muted); }
+    .muted { color:var(--muted); }
+    .badge { display:inline-block; padding:4px 8px; border:1px solid var(--border); border-radius:999px; }
+  </style>
+</head>
+<body>
+  <h1>PedidoService - SOAP Tester</h1>
+  <div class="card">
+    <div class="col3">
+      <div><b>Endpoint SOAP:</b><br><span class="badge">http://127.0.0.1:8000/</span></div>
+      <div><b>WSDL:</b><br><a href="/?wsdl" target="_blank">/?wsdl</a></div>
+      <div><b>Auth:</b><br><span class="badge">Basic (SQLite)</span></div>
+    </div>
+    <small>Dica: rode o servidor com <code>LOG_LEVEL=DEBUG</code> para ver o XML de requisição/resposta no console.</small>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Usuário</label>
+        <input id="user" value="usuario_teste">
+      </div>
+      <div>
+        <label>Senha</label>
+        <input id="pass" type="password" value="senha_teste">
+      </div>
+    </div>
+
+    <label>Operação</label>
+    <select id="op">
+      <option value="criar_pedido">criar_pedido(descricao: string) → int</option>
+      <option value="consultar_status">consultar_status(pedido_id: int) → string</option>
+      <option value="cancelar_pedido">cancelar_pedido(pedido_id: int) → bool</option>
+    </select>
+
+    <div id="params">
+      <label id="label-main">Descrição (para criar_pedido)</label>
+      <input id="param-main" value="Pedido via UI">
+    </div>
+
+    <div>
+      <button onclick="enviar()">Enviar requisição SOAP</button>
+      <button onclick="limpar()">Limpar</button>
+    </div>
+    <small class="muted">A UI monta o envelope SOAP e faz POST para <code>/</code> com cabeçalho <code>Authorization: Basic ...</code>.</small>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <b>SOAP Request</b>
+      <pre id="req">(vazio)</pre>
+    </div>
+    <div class="card">
+      <b>SOAP Response</b>
+      <pre id="res">(vazio)</pre>
+    </div>
+  </div>
+
+<script>
+  const endpoint = "/"; // mesmo host/porta do Flask
+  const ns = "http://exemplo.com/pedido";
+
+  const op = document.getElementById('op');
+  const labelMain = document.getElementById('label-main');
+  const inputMain = document.getElementById('param-main');
+
+  op.addEventListener('change', () => {
+    if (op.value === 'criar_pedido') {
+      labelMain.textContent = "Descrição (para criar_pedido)";
+      inputMain.value = "Pedido via UI";
+    } else {
+      labelMain.textContent = "Pedido ID (para consultar/cancelar)";
+      inputMain.value = "1";
+    }
+  });
+
+  function authHeader() {
+    const u = document.getElementById('user').value;
+    const p = document.getElementById('pass').value;
+    return "Basic " + btoa(u + ":" + p);
+  }
+
+  function envelope(bodyXml) {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ped="${ns}">
+  <soapenv:Header/>
+  <soapenv:Body>
+    ${bodyXml}
+  </soapenv:Body>
+</soapenv:Envelope>`;
+  }
+
+  function bodyFromOp() {
+    const v = op.value;
+    const val = inputMain.value.trim();
+    if (v === "criar_pedido") {
+      return `<ped:criar_pedido><ped:descricao>${escapeXml(val)}</ped:descricao></ped:criar_pedido>`;
+    } else if (v === "consultar_status") {
+      return `<ped:consultar_status><ped:pedido_id>${val}</ped:pedido_id></ped:consultar_status>`;
+    } else {
+      return `<ped:cancelar_pedido><ped:pedido_id>${val}</ped:pedido_id></ped:cancelar_pedido>`;
+    }
+  }
+
+  async function enviar() {
+    const bodyXml = bodyFromOp();
+    const xml = envelope(bodyXml);
+    document.getElementById('req').textContent = xml;
+
+    try {
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/xml; charset=utf-8",
+          "SOAPAction": `http://127.0.0.1:8000/${op.value}`,
+          "Authorization": authHeader()
+        },
+        body: xml
+      });
+      const text = await resp.text();
+      document.getElementById('res').textContent = text;
+    } catch (e) {
+      document.getElementById('res').textContent = "Erro: " + e;
+    }
+  }
+
+  function limpar(){
+    document.getElementById('req').textContent = "(vazio)";
+    document.getElementById('res').textContent = "(vazio)";
+  }
+
+  function escapeXml(s){
+    return s.replace(/&/g,"&amp;")
+            .replace(/</g,"&lt;")
+            .replace(/>/g,"&gt;")
+            .replace(/"/g,"&quot;")
+            .replace(/'/g,"&apos;");
+  }
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/ui", methods=["GET"])
+def ui_page():
+    # Rota apenas para servir a página de testes (não exige autenticação aqui).
+    # As chamadas SOAP feitas por essa página para "/" enviam Authorization: Basic.
+    return render_template_string(UI_HTML)
+
+
+# ==========================
 
 
 # ==========================
