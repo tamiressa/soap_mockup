@@ -138,19 +138,31 @@ def auth(environ) -> bool:
 # ==========================
 # Funções SOAP
 # ==========================
-def criar_pedido(descricao: str) -> int:
+def criar_pedido(descricao: str) -> dict:
     """Cria um novo pedido no banco em memória."""
     novo = max(PEDIDOS.keys(), default=0) + 1
     PEDIDOS[novo] = {"status": "Processando", "descricao": descricao}
     logger.info(f"Pedido criado ID={novo} Descrição='{descricao}'")
-    return novo
+    return {"id": novo, "descricao": PEDIDOS[novo]["descricao"]}
 
 
 def consultar_status(pedido_id: int) -> str:
     """Consulta o status de um pedido pelo ID."""
-    status = PEDIDOS.get(pedido_id, {}).get("status", "Pedido não encontrado")
+    status = PEDIDOS.get(pedido_id, {}).get("descricao", "Pedido não encontrado")
     logger.info(f"Consulta status para ID={pedido_id} -> {status}")
     return status
+
+
+def listar_pedidos() -> list:
+    """Retorna uma lista de todos os pedidos com seus IDs e descrições."""
+    logger.info("Operação listar_pedidos foi chamada.")
+
+    # Usamos list comprehension para criar a lista de forma elegante
+    lista_formatada = [
+        {"id": pedido_id, "descricao": detalhes["descricao"]}
+        for pedido_id, detalhes in PEDIDOS.items()
+    ]
+    return lista_formatada
 
 
 def cancelar_pedido(pedido_id: int) -> bool:
@@ -177,14 +189,24 @@ DISPATCHER = SoapDispatcher(
 
 # Registro das operações SOAP
 DISPATCHER.register_function(
-    "criar_pedido", criar_pedido, returns={"id": int}, args={"descricao": str}
+    "criar_pedido",
+    criar_pedido,
+    returns={"id": int, "descricao": str},
+    args={"descricao": str},
 )
 
 DISPATCHER.register_function(
     "consultar_status",
     consultar_status,
-    returns={"status": str},
+    returns={"descricao": str},
     args={"pedido_id": int},
+)
+
+DISPATCHER.register_function(
+    "listar_pedidos",
+    listar_pedidos,
+    returns={"pedidos": [{"id": int, "descricao": str}]},
+    args={},  # Não recebe argumentos
 )
 
 DISPATCHER.register_function(
@@ -251,6 +273,7 @@ UI_HTML = r"""<!doctype html>
       <option value="criar_pedido">criar_pedido(descricao: string) → int</option>
       <option value="consultar_status">consultar_status(pedido_id: int) → string</option>
       <option value="cancelar_pedido">cancelar_pedido(pedido_id: int) → bool</option>
+      <option value="cancelar_pedido">cancelar_pedido(pedido_id: int) → bool</option>
     </select>
 
     <div id="params">
@@ -281,7 +304,7 @@ UI_HTML = r"""<!doctype html>
   </div>
 
 <script>
-  const endpoint = "/"; // mesmo host/porta do Flask
+  const endpoint = "/";
   const ns = "http://exemplo.com/pedido";
 
   const op = document.getElementById('op');
@@ -292,6 +315,8 @@ UI_HTML = r"""<!doctype html>
     if (op.value === 'criar_pedido') {
       labelMain.textContent = "Descrição (para criar_pedido)";
       inputMain.value = "Pedido via UI";
+    } else if (op.value === 'listar_pedidos'){
+    paramsDiv.style.display = 'none';
     } else {
       labelMain.textContent = "Pedido ID (para consultar/cancelar)";
       inputMain.value = "1";
@@ -321,6 +346,8 @@ UI_HTML = r"""<!doctype html>
       return `<ped:criar_pedido><ped:descricao>${escapeXml(val)}</ped:descricao></ped:criar_pedido>`;
     } else if (v === "consultar_status") {
       return `<ped:consultar_status><ped:pedido_id>${val}</ped:pedido_id></ped:consultar_status>`;
+    } else if(v === "listar_pedidos"){
+    return `<ped:listar_pedidos></ped:listar_pedidos>`;
     } else {
       return `<ped:cancelar_pedido><ped:pedido_id>${val}</ped:pedido_id></ped:cancelar_pedido>`;
     }
@@ -343,14 +370,76 @@ UI_HTML = r"""<!doctype html>
       });
       const text = await resp.text();
       document.getElementById('res').textContent = text;
+
+      // Response simplificada para todas as operações
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(text, "text/xml");
+
+      if (op.value === "consultar_status") {
+        const descNode = xmlDoc.getElementsByTagName("descricao")[0];
+        document.getElementById('res-simple').textContent = descNode
+          ? descNode.textContent
+          : "(tag <descricao> não encontrada)";
+
+      } else if (op.value === "criar_pedido") {
+        const idNode = xmlDoc.getElementsByTagName("id")[0];
+        const descNode = xmlDoc.getElementsByTagName("descricao")[0]
+
+        if (idNode && descNode){
+          document.getElementById('res-simple').textContent = `Pedido criado com ID: ${idNode.textContent}. Descrição: ${descNode.textContent}`;
+        }else {
+        document.getElementById('res-simple').textContent = 
+        "(Tags <id> ou <descricao> não encontradas na resposta)";
+        }
+    
+
+      } else if (op.value === "cancelar_pedido") {
+        const successNode = xmlDoc.getElementsByTagName("success")[0];
+        if (successNode) {
+          document.getElementById('res-simple').textContent =
+            successNode.textContent === "true"
+              ? "Pedido cancelado com sucesso"
+              : "Falha ao cancelar o pedido";
+        } else if (op.value === "cancelar_pedido") {
+        // ... seu código de cancelar_pedido ...
+    
+    // ADICIONE ESTE BLOCO NO FINAL
+    } else if (op.value === "listar_pedidos") {
+      // pysimplesoap geralmente usa a tag <item> para listas
+      const itens = xmlDoc.getElementsByTagName("item");
+      if (itens.length > 0) {
+        let resultado = "Pedidos encontrados:\n\n";
+        // Itera sobre cada <item> na resposta
+        for (let i = 0; i < itens.length; i++) {
+          const item = itens[i];
+          const idNode = item.getElementsByTagName("id")[0];
+          const descNode = item.getElementsByTagName("descricao")[0];
+          
+          if (idNode && descNode) {
+            resultado += `ID: ${idNode.textContent} - Descrição: ${descNode.textContent}\n`;
+          }
+        }
+        document.getElementById('res-simple').textContent = resultado;
+      } else {
+        document.getElementById('res-simple').textContent = "(Nenhum pedido encontrado)";
+      }
+    }
+        
+        else {
+          document.getElementById('res-simple').textContent = "(tag <success> não encontrada)";
+        }
+      }
+
     } catch (e) {
       document.getElementById('res').textContent = "Erro: " + e;
+      document.getElementById('res-simple').textContent = "(erro)";
     }
   }
 
   function limpar(){
     document.getElementById('req').textContent = "(vazio)";
     document.getElementById('res').textContent = "(vazio)";
+    document.getElementById('res-simple').textContent = "(vazio)";
   }
 
   function escapeXml(s){
@@ -361,6 +450,7 @@ UI_HTML = r"""<!doctype html>
             .replace(/'/g,"&apos;");
   }
 </script>
+
 </body>
 </html>
 """
