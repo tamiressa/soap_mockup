@@ -13,10 +13,14 @@ uv sync
 
 ## servidor
 ```bash
-uv run server
+    uv venv
+	.\.venv\Scripts\Activate.ps1
+	uv pip install -e .
+	python -m src.server.main
 ```
 
 ## client
 ```bash
-uv run client
+    .\.venv\Scripts\Activate.ps1
+	python -m src.client.main
 ```
