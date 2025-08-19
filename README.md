@@ -1,26 +1,33 @@
-# Instalação
+# Projeto Python com UV
 
-## Instalar uv
+## Instalação
 
-> https://docs.astral.sh/uv/getting-started/installation/
+### 1. Instalar o UV
 
-## Instalar dependências
+Primeiro, instale o gerenciador de pacotes UV seguindo a documentação oficial:
+
+[Documentação de Instalação do UV](https://astral.sh/docs/uv#installation)
+
+### 2. Instalar Dependências
+
 ```bash
 uv sync
 ```
 
-# Execução
+# Criar ambiente virtual (apenas primeira vez)
+uv venv
 
-## servidor
-```bash
-    uv venv // primeira vez
-	.\.venv\Scripts\Activate.ps1
-	uv pip install -e .
-	python -m src.server.main
-```
+# Ativar ambiente virtual (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
 
-## client
-```bash
-    .\.venv\Scripts\Activate.ps1
-	python -m src.client.main
-```
+# Instalar pacote em modo desenvolvimento
+uv pip install -e .
+
+# Executar servidor
+python -m src.server.main
+
+# Ativar ambiente virtual (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
+
+# Executar cliente
+python -m src.client.main
