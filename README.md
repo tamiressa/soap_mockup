@@ -13,7 +13,7 @@ uv sync
 
 ## servidor
 ```bash
-    uv venv
+    uv venv // primeira vez
 	.\.venv\Scripts\Activate.ps1
 	uv pip install -e .
 	python -m src.server.main
