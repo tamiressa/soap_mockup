@@ -138,19 +138,30 @@ def auth(environ) -> bool:
 # ==========================
 # Funções SOAP
 # ==========================
-def criar_pedido(descricao: str) -> int:
+def criar_pedido(descricao: str) -> dict:
     """Cria um novo pedido no banco em memória."""
     novo = max(PEDIDOS.keys(), default=0) + 1
     PEDIDOS[novo] = {"status": "Processando", "descricao": descricao}
     logger.info(f"Pedido criado ID={novo} Descrição='{descricao}'")
-    return novo
+    return {
+        "id": novo,
+        "descricao": PEDIDOS[novo]["descricao"],
+    }
 
 
-def consultar_status(pedido_id: int) -> str:
+
+def consultar_status(pedido_id: int) -> dict:
     """Consulta o status de um pedido pelo ID."""
-    status = PEDIDOS.get(pedido_id, {}).get("status", "Pedido não encontrado")
-    logger.info(f"Consulta status para ID={pedido_id} -> {status}")
-    return status
+    pedido = PEDIDOS.get(pedido_id, {})
+    if not pedido:
+        raise ValueError(f"Pedido com ID {pedido_id} não encontrado")
+    
+    resposta = {
+        "id": pedido_id,
+        "descricao": pedido.get("descricao", "Descrição não disponível")
+    }
+    logger.info(f"Consulta status para ID={pedido_id} -> {resposta}")
+    return resposta
 
 
 def cancelar_pedido(pedido_id: int) -> bool:
@@ -177,13 +188,13 @@ DISPATCHER = SoapDispatcher(
 
 # Registro das operações SOAP
 DISPATCHER.register_function(
-    "criar_pedido", criar_pedido, returns={"id": int}, args={"descricao": str}
+    "criar_pedido", criar_pedido, returns={"id": int, "descricao": str}, args={"descricao": str}
 )
 
 DISPATCHER.register_function(
     "consultar_status",
     consultar_status,
-    returns={"status": str},
+    returns={"id": int, "descricao": str},
     args={"pedido_id": int},
 )
 
@@ -327,26 +338,67 @@ UI_HTML = r"""<!doctype html>
   }
 
   async function enviar() {
-    const bodyXml = bodyFromOp();
-    const xml = envelope(bodyXml);
-    document.getElementById('req').textContent = xml;
+  const bodyXml = bodyFromOp();
+  const xml = envelope(bodyXml);
+  document.getElementById('req').textContent = xml;
 
-    try {
-      const resp = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/xml; charset=utf-8",
-          "SOAPAction": `http://127.0.0.1:8000/${op.value}`,
-          "Authorization": authHeader()
-        },
-        body: xml
-      });
-      const text = await resp.text();
-      document.getElementById('res').textContent = text;
-    } catch (e) {
-      document.getElementById('res').textContent = "Erro: " + e;
+  try {
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": `http://127.0.0.1:8000/${op.value}`,
+        "Authorization": authHeader()
+      },
+      body: xml
+    });
+    const text = await resp.text();
+    document.getElementById('res').textContent = text;
+
+    // Bloco de extração da resposta simplificada
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(text, "text/xml");
+    const resSimple = document.getElementById('res-simple');
+
+    if (op.value === "criar_pedido") {
+      const idNode = xmlDoc.getElementsByTagName("id")[0];
+      const descNode = xmlDoc.getElementsByTagName("descricao")[0];
+      resSimple.textContent = idNode && descNode
+        ? `Pedido criado - ID: ${idNode.textContent}, Descrição: ${descNode.textContent}`
+        : "(tag <id> ou <descricao> não encontrada)";
+
+    } else if (op.value === "consultar_status") {
+      // --- INÍCIO DA PARTE AJUSTADA ---
+      const idNode = xmlDoc.getElementsByTagName("id")[0];
+      const descNode = xmlDoc.getElementsByTagName("descricao")[0];
+      
+      // MUDANÇA 1: A verificação agora é idêntica à do "criar_pedido", checando se AMBOS os nós existem.
+      if (idNode && descNode) {
+        resSimple.textContent = `Consulta - ID: ${idNode.textContent}, Descrição: ${descNode.textContent}`;
+      } else {
+        // MUDANÇA 2: A mensagem de erro agora é precisa, não menciona mais o status.
+        resSimple.textContent = "(tag <id> ou <descricao> não encontrada na resposta)";
+      }
+      // --- FIM DA PARTE AJUSTADA ---
+
+    } else if (op.value === "cancelar_pedido") {
+      const successNode = xmlDoc.getElementsByTagName("success")[0];
+      if (successNode) {
+        resSimple.textContent =
+          successNode.textContent === "true"
+            ? "Pedido cancelado com sucesso"
+            : "Falha ao cancelar o pedido";
+      } else {
+        resSimple.textContent = "(tag <success> não encontrada)";
+      }
     }
+
+  } catch (error) {
+    document.getElementById('res').textContent = `Erro na requisição: ${error}`;
+    document.getElementById('res-simple').textContent = "Erro ao conectar com o servidor.";
   }
+}
+
 
   function limpar(){
     document.getElementById('req').textContent = "(vazio)";
