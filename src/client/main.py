@@ -101,7 +101,7 @@ def main():
     # ==========================
     # 1️⃣ Criar novo pedido
     # ==========================
-    logger.info("Enviando requisição: criar_pedido")
+    """logger.info("Enviando requisição: criar_pedido")
     novo_id = client.service.criar_pedido("Pedido autenticado")
     logger.info(f"✅ Novo pedido criado com ID: {novo_id}")
     print_soap_history()
@@ -120,7 +120,7 @@ def main():
     logger.info(f"Enviando requisição: cancelar_pedido para ID={novo_id}")
     resultado = client.service.cancelar_pedido(novo_id)
     logger.info(f"❌ Pedido {novo_id} cancelado? {resultado}")
-    print_soap_history()
+    print_soap_history()"""
 
 
 # ==========================

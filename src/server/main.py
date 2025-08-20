@@ -55,8 +55,7 @@ logger.addHandler(console_handler)
 # Banco mock de pedidos
 # ==========================
 PEDIDOS = {
-    1: {"status": "Processando", "descricao": "Pedido inicial"},
-    2: {"status": "Enviado", "descricao": "Pedido enviado"},
+    
 }
 
 # ==========================
@@ -174,6 +173,19 @@ def cancelar_pedido(pedido_id: int) -> bool:
     return False
 
 
+
+def listar_pedidos() -> str:
+    if not PEDIDOS:
+        return "Não há Pedidos"
+    
+    linhas = []
+    for pid, dados in PEDIDOS.items():
+        linhas.append(f"ID={pid}, Descrição={dados.get('descricao', 'Descrição não disponível')}")
+    
+    logger.info(f"Listagem de {len(linhas)} pedidos retornada.")
+    return "\n".join(linhas)
+
+
 # ==========================
 # Configuração do dispatcher SOAP
 # ==========================
@@ -203,6 +215,13 @@ DISPATCHER.register_function(
     cancelar_pedido,
     returns={"success": bool},
     args={"pedido_id": int},
+)
+
+DISPATCHER.register_function(
+    "listar_pedidos",
+    listar_pedidos,
+    returns={"pedidos": str},
+    args={}
 )
 
 
@@ -262,6 +281,9 @@ UI_HTML = r"""<!doctype html>
       <option value="criar_pedido">criar_pedido(descricao: string) → int</option>
       <option value="consultar_status">consultar_status(pedido_id: int) → string</option>
       <option value="cancelar_pedido">cancelar_pedido(pedido_id: int) → bool</option>
+
+      <option value="listar_pedidos">listar_pedidos() → lista</option>
+
     </select>
 
     <div id="params">
@@ -332,12 +354,18 @@ UI_HTML = r"""<!doctype html>
       return `<ped:criar_pedido><ped:descricao>${escapeXml(val)}</ped:descricao></ped:criar_pedido>`;
     } else if (v === "consultar_status") {
       return `<ped:consultar_status><ped:pedido_id>${val}</ped:pedido_id></ped:consultar_status>`;
+
+      
+    } else if (v === "listar_pedidos") {
+      return `<ped:listar_pedidos/>`;
+
+      
     } else {
       return `<ped:cancelar_pedido><ped:pedido_id>${val}</ped:pedido_id></ped:cancelar_pedido>`;
     }
   }
 
-  async function enviar() {
+async function enviar() {
   const bodyXml = bodyFromOp();
   const xml = envelope(bodyXml);
   document.getElementById('req').textContent = xml;
@@ -368,18 +396,13 @@ UI_HTML = r"""<!doctype html>
         : "(tag <id> ou <descricao> não encontrada)";
 
     } else if (op.value === "consultar_status") {
-      // --- INÍCIO DA PARTE AJUSTADA ---
       const idNode = xmlDoc.getElementsByTagName("id")[0];
       const descNode = xmlDoc.getElementsByTagName("descricao")[0];
-      
-      // MUDANÇA 1: A verificação agora é idêntica à do "criar_pedido", checando se AMBOS os nós existem.
       if (idNode && descNode) {
         resSimple.textContent = `Consulta - ID: ${idNode.textContent}, Descrição: ${descNode.textContent}`;
       } else {
-        // MUDANÇA 2: A mensagem de erro agora é precisa, não menciona mais o status.
         resSimple.textContent = "(tag <id> ou <descricao> não encontrada na resposta)";
       }
-      // --- FIM DA PARTE AJUSTADA ---
 
     } else if (op.value === "cancelar_pedido") {
       const successNode = xmlDoc.getElementsByTagName("success")[0];
@@ -391,6 +414,14 @@ UI_HTML = r"""<!doctype html>
       } else {
         resSimple.textContent = "(tag <success> não encontrada)";
       }
+
+    } else if (op.value === "listar_pedidos") {
+      const pedidosNode = xmlDoc.getElementsByTagName("pedidos")[0];
+      if (pedidosNode && pedidosNode.textContent.trim() !== "") {
+        resSimple.textContent = pedidosNode.textContent;
+      } else {
+        resSimple.textContent = "(nenhum pedido encontrado)";
+      }
     }
 
   } catch (error) {
@@ -398,6 +429,7 @@ UI_HTML = r"""<!doctype html>
     document.getElementById('res-simple').textContent = "Erro ao conectar com o servidor.";
   }
 }
+
 
 
   function limpar(){
